@@ -30,6 +30,7 @@
 
 - 參考模型資料（lite / 完整版）以 base64 內嵌於程式檔內（`assets/splat-viewer.js`、`assets/app.js`），不另外 fetch `.splat` 檔。
 - 範例照片以 base64 內嵌於 `assets/examples-data.js`（發布管道無法推送二進位檔案）；`app.js` 優先讀內嵌資料，無內嵌時才 fetch `assets/examples/`。
+- OpenCV.js 因發布管道的請求大小上限拆成 `assets/opencv-part1/2/3.js` 三段供應，`app.js` 載入時依序 fetch 後合併注入；合併結果與原始整檔逐位元組相同（SHA-256 一致）。
 - 其餘行為與建置版本一致。
 
 ## 授權 / 出處
