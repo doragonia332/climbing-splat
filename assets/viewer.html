@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Gaussian Splat 檢視器</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0b0e13; }
+  #canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+  .hud {
+    position: fixed; color: #9fb4c8; font: 12px/1.5 -apple-system, "Segoe UI", sans-serif;
+    text-shadow: 0 1px 2px rgba(0,0,0,.8); pointer-events: none; z-index: 5;
+  }
+  #fps { top: 8px; right: 10px; text-align: right; }
+  #camid { bottom: 8px; right: 10px; }
+  #hint { bottom: 8px; left: 10px; }
+  #message {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #e8eef4; font: 14px/1.6 -apple-system, "Segoe UI", sans-serif; text-align: center;
+    padding: 20px; pointer-events: none; z-index: 4;
+  }
+  #spinner {
+    position: fixed; top: 50%; left: 50%; width: 38px; height: 38px; margin: -19px 0 0 -19px;
+    border: 3px solid rgba(255,255,255,.15); border-top-color: #6cb2f5; border-radius: 50%;
+    animation: spin 0.9s linear infinite; z-index: 6;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #progressWrap {
+    position: fixed; top: 0; left: 0; right: 0; height: 3px; background: rgba(255,255,255,.08); z-index: 6;
+  }
+  #progress { height: 100%; width: 0%; background: #6cb2f5; transition: width .2s; }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="progressWrap"><div id="progress"></div></div>
+<div id="spinner"></div>
+<div id="message"></div>
+<div class="hud" id="fps"></div>
+<div class="hud" id="camid"></div>
+<div class="hud" id="hint">拖曳旋轉 · 滾輪縮放 · WASD 移動</div>
+<script>
+  // Surface any viewer-side script error as on-screen text instead of
+  // a silent black canvas or an endless spinner.
+  window.addEventListener("error", function (e) {
+    if (window.__splatFailed || window.__splatBooted) return;
+    window.__splatFailed = true;
+    var s = document.getElementById("spinner");
+    if (s) s.style.display = "none";
+    var m = document.getElementById("message");
+    if (m && !m.innerText)
+      m.innerText = "檢視器程式發生錯誤" + (e.message ? "：" + e.message : "") + "，請重新整理頁面再試。";
+  }, true);
+</script>
+<script src="splat-viewer.js?v=9"></script>
+<script>
+  // If splat-viewer.js itself failed to load or run, main() never starts
+  // and the CSS spinner would spin forever with no explanation. Surface
+  // an error instead.
+  setTimeout(function () {
+    if (window.__splatBooted) return;
+    var s = document.getElementById("spinner");
+    if (s) s.style.display = "none";
+    var m = document.getElementById("message");
+    if (m && !m.innerText) m.innerText = "檢視器程式未能載入，請檢查網路後重新整理頁面。";
+  }, 12000);
+</script>
+</body>
+</html>

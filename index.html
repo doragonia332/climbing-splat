@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b0e13">
+<title>攀岩牆 3D 重建 — 瀏覽器內 SfM × Gaussian Splatting</title>
+<style>
+  :root {
+    --bg: #0b0e13; --panel: #131922; --panel2: #1a2230; --line: #26303f;
+    --txt: #e8eef4; --dim: #9fb4c8; --acc: #6cb2f5; --acc2: #ffb454; --good: #5fd08a; --bad: #f27d72;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--txt);
+    font: 15px/1.65 -apple-system, "PingFang TC", "Microsoft JhengHei", "Segoe UI", sans-serif; }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 20px 16px 60px; }
+  header h1 { font-size: 24px; margin: 6px 0 4px; letter-spacing: .5px; }
+  header p { color: var(--dim); margin: 0 0 6px; }
+  .badge { display: inline-block; background: var(--panel2); border: 1px solid var(--line);
+    color: var(--acc); border-radius: 999px; padding: 1px 10px; font-size: 12px; margin-right: 6px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 16px 18px; margin-top: 16px; }
+  section h2 { font-size: 17px; margin: 2px 0 10px; }
+  section h2 .no { color: var(--acc); margin-right: 8px; }
+  .sub { color: var(--dim); font-size: 13.5px; margin-top: -4px; }
+  #viewerBox { position: relative; width: 100%; height: 62vh; min-height: 340px; border: 1px solid var(--line);
+    border-radius: 10px; background: #000; overflow: hidden; }
+  #viewerBox #canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+  #viewerBox .hud { position: absolute; color: #9fb4c8; font: 12px/1.5 -apple-system, "Segoe UI", sans-serif;
+    text-shadow: 0 1px 2px rgba(0,0,0,.8); pointer-events: none; z-index: 5; }
+  #viewerBox #fps { top: 8px; right: 10px; text-align: right; }
+  #viewerBox #camid { bottom: 8px; right: 10px; }
+  #viewerBox #hint { bottom: 8px; left: 10px; }
+  #viewerBox #message { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #e8eef4; font: 14px/1.6 -apple-system, "Segoe UI", sans-serif; text-align: center;
+    padding: 20px; pointer-events: none; z-index: 4; }
+  #viewerBox #spinner { position: absolute; top: 50%; left: 50%; width: 38px; height: 38px; margin: -19px 0 0 -19px;
+    border: 3px solid rgba(255,255,255,.15); border-top-color: #6cb2f5; border-radius: 50%;
+    animation: vspin 0.9s linear infinite; z-index: 6; pointer-events: none; }
+  @keyframes vspin { to { transform: rotate(360deg); } }
+  #viewerBox #progressWrap { position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: rgba(255,255,255,.08); z-index: 6; pointer-events: none; }
+  #viewerBox #progress { height: 100%; width: 0%; background: #6cb2f5; transition: width .2s; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+  button { background: var(--panel2); color: var(--txt); border: 1px solid var(--line);
+    border-radius: 9px; padding: 8px 14px; font-size: 14px; cursor: pointer; }
+  button:hover { border-color: var(--acc); }
+  button.primary { background: #1d4ed8; border-color: #1d4ed8; color: #fff; font-weight: 600; }
+  button.primary:hover { background: #2563eb; }
+  button.active { border-color: var(--acc); color: var(--acc); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  #thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  #thumbs figure { margin: 0; width: 96px; }
+  #thumbs img { width: 96px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  #thumbs figcaption { font-size: 11px; color: var(--dim); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #thumbs .del { color: var(--bad); cursor: pointer; font-size: 11px; }
+  #log { background: #0a0d11; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+    font: 12.5px/1.7 ui-monospace, Menlo, Consolas, monospace; color: #b7c9da; height: 168px; overflow-y: auto; white-space: pre-wrap; }
+  #log .ok { color: var(--good); } #log .err { color: var(--bad); } #log .hl { color: var(--acc2); }
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 10px; }
+  .stats div b { display: block; font-size: 20px; color: var(--acc); }
+  .stats div span { font-size: 12px; color: var(--dim); }
+  ul.tight { margin: 6px 0; padding-left: 20px; } ul.tight li { margin: 3px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 6px 9px; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); color: var(--dim); font-weight: 600; }
+  code { background: var(--panel2); padding: 0 5px; border-radius: 5px; font-size: 12.5px; }
+  footer { color: var(--dim); font-size: 12.5px; margin-top: 22px; }
+  a { color: var(--acc); }
+  .warn { color: var(--acc2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><span class="badge">全管線在瀏覽器內運行</span><span class="badge">免上傳 · 可離線</span></div>
+    <h1>攀岩牆 3D 重建 × Gaussian Splatting</h1>
+    <p>在岩場連拍一組照片 → 直接在這個 web app 裡跑 SfM 三維重建 → 轉成 Gaussian splats 即時渲染。
+    照片只存在你裝置的 IndexedDB,不經過任何伺服器。</p>
+  </header>
+
+  <section>
+    <h2><span class="no">1</span>3D 檢視器</h2>
+    <div id="viewerBox">
+      <canvas id="canvas"></canvas>
+      <div id="progressWrap"><div id="progress"></div></div>
+      <div id="spinner"></div>
+      <div id="message"></div>
+      <div class="hud" id="fps"></div>
+      <div class="hud" id="camid"></div>
+      <div class="hud" id="hint">拖曳旋轉 · 滾輪縮放 · WASD 移動</div>
+    </div>
+    <div class="row">
+      <button id="btnRef" class="active">參考成果（COLMAP · 128 張）</button>
+      <button id="btnMine" disabled>我的重建結果</button>
+      <span class="sub" id="viewerNote">目前顯示：離線以 COLMAP 用 128 張照片重建的參考模型（品質上限對照）。</span>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="no">2</span>拍照佇列（離線保存）</h2>
+    <p class="sub">照片加入後存在本機 IndexedDB，關掉 app、斷網都不會消失。拍攝要領見第 4 節。</p>
+    <div class="row">
+      <button id="btnCamera">📷 從相機拍</button>
+      <button id="btnPick">🖼 選取照片</button>
+      <button id="btnExamples">✦ 載入範例照片組（15 張）</button>
+      <button id="btnClear">清除全部</button>
+      <span class="sub" id="queueInfo">佇列是空的</span>
+    </div>
+    <input type="file" id="fileCamera" accept="image/*" capture="environment" hidden>
+    <input type="file" id="filePick" accept="image/*" multiple hidden>
+    <div id="thumbs"></div>
+  </section>
+
+  <section>
+    <h2><span class="no">3</span>在瀏覽器裡重建</h2>
+    <p class="sub">按下開始後，OpenCV.js（WASM）會在本機擷取 AKAZE 特徵，接著跑匹配、本質矩陣位姿、
+    三角化與 bundle adjustment，全部在你的裝置上完成。15 張照片在筆電上約 1–3 分鐘，手機會久一點，請保持頁面開啟。</p>
+    <div class="row">
+      <button id="btnRun" class="primary">▶ 開始重建</button>
+      <button id="btnDownload" disabled>下載我的 .splat</button>
+      <span class="sub" id="runState"></span>
+    </div>
+    <div class="stats" id="stats" style="display:none">
+      <div><b id="stReg">–</b><span>成功註冊的照片</span></div>
+      <div><b id="stPts">–</b><span>Gaussian 數量（3D 點）</span></div>
+      <div><b id="stTime">–</b><span>重建耗時</span></div>
+    </div>
+    <div id="log" style="margin-top:10px">重建紀錄會顯示在這裡。</div>
+  </section>
+
+  <section>
+    <h2><span class="no">4</span>15 張怎麼拍才重建得出來</h2>
+    <ul class="tight">
+      <li><b>適用範圍</b>：一顆抱石、一小面牆（約 3–6 公尺寬）。整條長路線或整面大牆請拍 25–60 張。</li>
+      <li><b>連拍成弧</b>：沿著牆面水平移動連拍，相鄰照片重疊至少 2/3；再換一個高度（蹲低 / 舉高）補第二排。</li>
+      <li><b>每張都要有紋理</b>：讓彩色岩點、牆面接縫、膠帶標記入鏡；純色空白牆面是 SfM 的天敵，特徵抓不到就重建不出來。</li>
+      <li><b>穩、亮、不動</b>：避免手震糊掉；拍攝期間不要有人走動、不要移動岩點；光線保持一致。</li>
+      <li><b>距離大致固定</b>：離牆 2–4 公尺平行移動，不要一邊拍一邊大幅忽遠忽近，也不要原地旋轉拍全景（那種拍法沒有基線，三角化會失敗）。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="no">5</span>架構與正式版建議（給開發的朋友）</h2>
+    <table>
+      <tr><th style="width:22%">階段</th><th style="width:38%">這個原型的做法（全部在裝置上）</th><th>正式版可以再進步的地方</th></tr>
+      <tr><td>拍攝 / 離線佇列</td><td>PWA 頁面 + IndexedDB 存原圖；讀 EXIF 的 35mm 等效焦距當相機內參</td><td>加 Service Worker 做完整離線安裝；拍攝時即時提示重疊率（用上一張的特徵覆蓋率回饋）</td></tr>
+      <tr><td>SfM 重建</td><td>OpenCV.js（WASM）AKAZE 特徵 + 純 JS 八點法/RANSAC/DLT 三角化 + 自寫 LM bundle adjustment；焦距不準時自動掃描倍率驗證</td><td>照片量大或要更穩時，可選配雲端 COLMAP 做「精修模式」；或等 WebGPU 版 SfM/訓練成熟後整段搬上 GPU</td></tr>
+      <tr><td>點雲 → Gaussians</td><td>稀疏點直接轉 gaussians：kNN 距離決定大小、點的觀測平均色當顏色</td><td>要照片級真實感需跑真正的 3DGS 訓練（可微渲染迭代）——目前不適合手機瀏覽器，建議放筆電/雲端 GPU，或做「快速預覽（本機）/ 精修（雲端）」雙軌</td></tr>
+      <tr><td>渲染</td><td>antimatter15 的 WebGL splat renderer（MIT），輸出標準 <code>.splat</code> / 3DGS <code>.ply</code></td><td>可換 WebGPU renderer 提升大量 gaussians 的排序效能；加路線標註（hold 圈選、beta 影片錨點）就是攀岩 app 的核心價值</td></tr>
+    </table>
+    <p class="sub" style="margin-top:10px">誠實的限制：這個原型的重建是「稀疏 SfM + 點 splat」，成果是可辨識路線與岩點位置的立體模型，不是照片級寫實。
+    室內岩場若牆面太素、岩點太少，任何 SfM 都會吃力——拍攝時讓每張照片帶到足夠岩點最重要。</p>
+  </section>
+
+  <footer>
+    檢視器：<a href="https://github.com/antimatter15/splat" target="_blank" rel="noopener">antimatter15/splat</a>（MIT）·
+    特徵/位姿：OpenCV.js（Apache 2.0）· 範例照片：COLMAP 官方 South Building 資料集 ·
+    參考模型：COLMAP 128 張 / 77,438 點，本機瀏覽器重建：15 張範例照。
+  </footer>
+</div>
+<script src="assets/sfm.js?v=9"></script>
+<script>
+  // Surface any viewer-side script error as on-screen text instead of
+  // a silent black canvas or an endless spinner.
+  window.addEventListener("error", function (e) {
+    if (window.__splatFailed || window.__splatBooted) return;
+    window.__splatFailed = true;
+    var s = document.getElementById("spinner");
+    if (s) s.style.display = "none";
+    var m = document.getElementById("message");
+    if (m && !m.innerText)
+      m.innerText = "檢視器程式發生錯誤" + (e.message ? "：" + e.message : "") + "，請重新整理頁面再試。";
+  }, true);
+</script>
+<script src="assets/splat-viewer.js?v=9"></script>
+<script>
+  // If splat-viewer.js itself failed to load or run, main() never starts
+  // and the CSS spinner would spin forever with no explanation.
+  setTimeout(function () {
+    if (window.__splatBooted) return;
+    var s = document.getElementById("spinner");
+    if (s) s.style.display = "none";
+    var m = document.getElementById("message");
+    if (m && !m.innerText) m.innerText = "檢視器程式未能載入，請檢查網路後重新整理頁面。";
+  }, 12000);
+</script>
+<script src="assets/examples-data.js?v=9"></script>
+<script src="assets/app.js?v=9"></script>
+</body>
+</html>
